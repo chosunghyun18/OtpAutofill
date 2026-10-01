@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "OTP Autofill",
+  "version": "0.0.1",
+  "description": "휴대폰으로 받은 인증번호를 크롬에서 클릭 한 번으로 입력합니다 (종단간 암호화).",
+  "minimum_chrome_version": "120",
+  "permissions": ["storage", "alarms"],
+  "host_permissions": ["http://localhost:8787/*"],
+  "optional_host_permissions": ["https://*/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_popup": "popup.html", "default_title": "OTP Autofill" },
+  "content_scripts": [
+    {
+      "matches": ["https://*/*", "http://localhost/*"],
+      "js": ["content.js"],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+*.log
+.env
+.env.*
+.DS_Store
+# 확장 프로그램 패키징 산출물
+*.zip
+*.crx
+*.pem
