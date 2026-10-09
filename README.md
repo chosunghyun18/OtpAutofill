@@ -15,6 +15,9 @@ iOS/Android가 키보드 위에 인증번호를 띄워주는 기능을 데스크
 - **짧은 수명**: 코드는 수신 후 3분, 릴레이 메시지는 2분, 페어링 코드는 5분. 1회 사용 후 삭제.
 
 설계 SSOT: Obsidian `Projects/work/OtpAutofill/OtpAutofill Design Spec.md`
+동작 방식(설치·흐름·상태 머신·검증): 같은 폴더 `OtpAutofill 동작 방식.md`
+
+**크롬 확장 프로그램(MV3)으로만 동작하며, 사용자가 평소 쓰는 크롬에 설치해야 한다.**
 
 ## 구조
 
