@@ -264,6 +264,10 @@ async function handle(msg: ExtMessage, sender: chrome.runtime.MessageSender): Pr
   const fromPopup = sender.id === chrome.runtime.id && sender.url?.startsWith(chrome.runtime.getURL(""));
   switch (msg.type) {
     case "otp:query":
+      // 사용자가 OTP 입력칸에 포커스하면 content가 조회한다 — 워커가 종료됐다 깨어난 경우라도
+      // 30초 alarm을 기다리지 않고 바로 수신을 재개한다 (수신 대기 중인 문자를 즉시 가져옴)
+      void resume();
+    // fallthrough
     case "otp:take": {
       const latest = await getLatest();
       if (!latest || !sender.url) return { decision: null } satisfies QueryResponse;

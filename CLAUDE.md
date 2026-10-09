@@ -15,6 +15,7 @@
 
 ## 명령
 - `npm test` (vitest, 루트에서 전체) / `npm run typecheck` / `npm run relay` / `npm run build:ext`
+- `npm run e2e` — 실제 Chromium에 확장을 올려 페어링~입력 30개 시나리오 검증 (최초 `npx playwright install chromium`). `npm run e2e:latency` — 수신 지연 실측
 
 ## 컨벤션
 - 문서·주석은 한국어, 식별자는 영어.

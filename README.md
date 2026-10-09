@@ -41,6 +41,7 @@ npm run typecheck    # tsc --noEmit
 npm run relay        # 릴레이 :8787 (PORT 환경변수로 변경)
 npm run build:ext    # extension/dist 생성
 npm run fake-phone -- <페어링코드>   # 폰 시뮬레이터 (companion/README.md)
+npm run e2e          # 브라우저 E2E (Chromium + 확장 + 릴레이 + fake-phone). 최초 `npx playwright install chromium`
 ```
 
 확장 로드: `chrome://extensions` → 개발자 모드 → "압축해제된 확장 프로그램을 로드" → `extension/dist`.

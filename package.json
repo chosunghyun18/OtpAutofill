@@ -3,21 +3,30 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "workspaces": ["packages/*", "relay", "extension"],
+  "workspaces": [
+    "packages/*",
+    "relay",
+    "extension"
+  ],
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build:ext": "npm run build -w extension",
     "relay": "npm run dev -w relay",
-    "fake-phone": "tsx scripts/fake-phone.ts"
+    "fake-phone": "tsx scripts/fake-phone.ts",
+    "e2e": "npm run build:ext && tsx scripts/e2e/browser.e2e.ts",
+    "e2e:latency": "npm run build:ext && tsx scripts/e2e/latency.e2e.ts"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.270",
     "@types/node": "^20.14.0",
     "esbuild": "^0.23.0",
+    "playwright": "^1.64.0",
     "tsx": "^4.16.0",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }

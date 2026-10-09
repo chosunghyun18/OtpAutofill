@@ -31,5 +31,6 @@ npm run watch -w extension
 4. 문자에 알려진 서비스명이 있는데 현재 사이트가 그 도메인이 아니면 칩에 주황 테두리 경고 (입력은 허용)
 
 ## 알려진 한계
-- MV3 서비스 워커는 유휴 시 종료됨 → alarm 주기(30초)만큼 수신 지연 가능. Phase 1에서 실측 후 WebSocket(Chrome 116+ keepalive) 전환 검토.
+- MV3 서비스 워커가 종료되면 30초 alarm까지 수신이 멈춘다. 다만 사용자가 OTP 입력칸에 포커스하면 content의 조회가 워커를 깨워
+  즉시 수신을 재개한다. 실측(2026-10-09, `npm run e2e:latency`): 활성 ≈60ms, 워커 강제 종료 후 포커스 시 ≈130ms, 포커스 없으면 최대 ≈29초.
 - 교차 출처 iframe(결제창 등) 내부 입력칸은 `all_frames`로 동작하지만 정책은 iframe의 URL 기준.
