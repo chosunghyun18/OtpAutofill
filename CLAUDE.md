@@ -1,7 +1,10 @@
 # CLAUDE.md
 
 ## 개요
-폰 SMS 인증번호를 크롬에서 클릭 한 번으로 입력하는 도구. 폰(companion) → 릴레이(암호문 중계) → 크롬 확장(MV3).
+**v2 (2026-10-09~):** 크롬 확장 단독. 사이트 이메일 인증 메일을 Gmail API(`gmail.readonly`, `chrome.identity`)로 찾아
+크롬 알림으로 보여 주고, 알림 클릭 시 그 탭 입력칸에 입력한다. 자체 서버 없음, 메일 원문 미저장·미전송.
+v1(폰 SMS → 릴레이 → 확장) 코드(`relay/`, `packages/protocol`, `scripts/fake-phone.ts`, `companion/`)는 보류 상태다.
+입력칸 탐지·입력·칩·파서·E2E 하네스는 v2에서 재사용한다.
 **설계 SSOT는 Obsidian `Projects/work/OtpAutofill/` (`OtpAutofill Design Spec.md`). 코드와 문서가 충돌하면 문서가 우선.**
 할 일: 같은 폴더 `task/todo.md`.
 
