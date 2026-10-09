@@ -1,77 +1,67 @@
-import type { ExtMessage, LatestOtp, PairState } from "./messages.js";
-import { pairPhase } from "./pairing.js";
+/** 팝업 (v2) — Gmail 연결·해제, 최근 항목·복사, 지금 확인, 알림 안내, 마스킹 옵션 */
+import type { ExtMessage, PopupState } from "./messages.js";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const send = <T>(msg: ExtMessage) => chrome.runtime.sendMessage(msg) as Promise<T>;
 
-async function renderLatest() {
-  const latest = await send<LatestOtp | null>({ type: "otp:peek" });
-  const copy = $<HTMLButtonElement>("copy");
-  if (!latest) {
-    $("code").textContent = "—";
-    $("meta").textContent = "";
-    copy.disabled = true;
-    return;
-  }
-  $("code").textContent = latest.code;
-  const left = Math.max(0, Math.round((latest.expiresAt - Date.now()) / 1000));
-  $("meta").textContent = `${latest.service?.name ?? latest.sender ?? "알 수 없는 발신자"} · ${left}초 후 만료${
-    latest.boundOrigin ? ` · ${latest.boundOrigin} 전용` : ""
-  }`;
-  copy.disabled = false;
-  copy.onclick = () => navigator.clipboard.writeText(latest.code);
+async function render() {
+  const s = await send<PopupState>({ type: "popup:state" });
+  const status = $("status");
+  status.className = s.authError ? "warn" : "muted";
+  status.textContent = !s.connected
+    ? "Gmail이 연결되지 않았습니다."
+    : s.authError
+      ? "Gmail 권한이 만료됐습니다. 다시 연결하세요."
+      : `Gmail 연결됨${s.watching ? ` · ${s.watching}개 탭 감시 중` : ""}`;
+  $("connect").hidden = s.connected && !s.authError;
+  $("disconnect").hidden = !s.connected;
+  $("check").hidden = !s.connected;
+  $<HTMLInputElement>("mask").checked = s.mask;
+
+  const ul = $("items");
+  ul.replaceChildren(
+    ...s.items.map((it) => {
+      const li = document.createElement("li");
+      li.dataset.id = it.id;
+      const head = document.createElement("div");
+      const left = Math.max(0, Math.round((it.expiresAt - Date.now()) / 1000));
+      head.className = it.authenticated ? "muted" : "warn";
+      head.textContent = `${it.authenticated ? "" : "⚠ 발신 미확인 · "}${it.site} · ${Math.ceil(left / 60)}분 남음`;
+      const body = document.createElement("div");
+      body.className = it.kind === "code" ? "code" : "link";
+      // 마스킹 옵션이면 팝업에서도 코드를 가린다 (복사는 그대로)
+      body.textContent = it.kind === "code" && s.mask ? "●".repeat(it.value.length) : it.value;
+      const copy = document.createElement("button");
+      copy.textContent = it.kind === "code" ? "복사" : "링크 복사";
+      copy.onclick = () => void navigator.clipboard.writeText(it.value);
+      li.append(head, body, copy);
+      return li;
+    }),
+  );
+  $("empty").hidden = s.items.length > 0;
 }
 
-async function renderPair() {
-  const s = await send<PairState>({ type: "pair:status" });
-  const phase = pairPhase(s);
-  const status = $("pairStatus");
-  $("unpair").hidden = phase !== "active";
-  $("pair").hidden = phase === "active" || phase === "needs-verify";
-  $("verify").hidden = phase !== "needs-verify";
-  const relay = $<HTMLInputElement>("relay");
-  if (s.relayUrl && document.activeElement !== relay) relay.value = s.relayUrl;
-  if (phase === "active") {
-    status.innerHTML = "";
-    status.append(`페어링됨 · 안전번호 `, Object.assign(document.createElement("b"), { textContent: s.safetyNumber ?? "" }));
-  } else if (phase === "needs-verify") {
-    status.textContent = "";
-    $("sn").textContent = s.safetyNumber ?? "";
-    // 버튼은 화면에 띄운 바로 그 채널·안전번호를 확인한다
-    const confirm = async (match: boolean) => {
-      await send({ type: "pair:confirm", match, channelId: s.channelId ?? "", safetyNumber: s.safetyNumber ?? "" });
-      $("notice").textContent = match
-        ? ""
-        : "안전번호가 달라 페어링을 해제했습니다. 릴레이가 중간에서 키를 바꿨을 수 있습니다. 다른 네트워크나 릴레이에서 다시 페어링하세요.";
-      await renderPair();
-    };
-    $("match").onclick = () => void confirm(true);
-    $("mismatch").onclick = () => void confirm(false);
-  } else if (phase === "waiting-phone") {
-    status.textContent = `폰 앱에 페어링 코드 입력: ${s.pairingCode}`;
-  } else {
-    status.textContent = "페어링되지 않음";
-  }
-}
-
-$("pair").onclick = async () => {
-  const relayUrl = $<HTMLInputElement>("relay").value.replace(/\/$/, "");
-  // localhost 외 릴레이는 optional_host_permissions에서 사용자 동의를 받아 해당 origin만 허용
-  const origin = new URL(relayUrl).origin;
-  if (!origin.startsWith("http://localhost")) {
-    const granted = await chrome.permissions.request({ origins: [`${origin}/*`] });
-    if (!granted) return;
-  }
-  $("notice").textContent = "";
-  await send({ type: "pair:start", relayUrl });
-  await renderPair();
+$("connect").onclick = async () => {
+  const r = await send<{ ok?: boolean; error?: string }>({ type: "gmail:connect" });
+  if (r?.error) $("status").textContent = `연결 실패: ${r.error}`;
+  else await render();
 };
-$("unpair").onclick = async () => {
-  await send({ type: "pair:revoke" });
-  await renderPair();
-  await renderLatest();
+$("disconnect").onclick = async () => {
+  await send({ type: "gmail:disconnect" });
+  await render();
 };
+$("check").onclick = async () => {
+  await send({ type: "watch:now" });
+  await render();
+};
+$<HTMLInputElement>("mask").onchange = (e) => void send({ type: "settings:set", mask: (e.target as HTMLInputElement).checked });
 
-void renderLatest();
-void renderPair();
-setInterval(() => void (renderLatest(), renderPair()), 2000);
+chrome.notifications.getPermissionLevel((level) => {
+  if (level === "denied") {
+    $("notifHint").className = "warn";
+    $("notifHint").textContent = "크롬 알림이 꺼져 있습니다. 입력칸을 누르면 나오는 칩으로 입력할 수 있습니다.";
+  }
+});
+
+void render();
+setInterval(() => void render(), 2000);

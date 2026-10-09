@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { badgeText, pairPhase, pinPeerKey } from "../src/pairing.js";
+import { badgeText, pairPhase, pinPeerKey } from "../../src/v1/pairing.js";
 
 describe("pairPhase", () => {
   const now = 1_000;

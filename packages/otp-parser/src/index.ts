@@ -149,3 +149,5 @@ export function parseOtp(text: string): OtpResult | null {
   }
   return best;
 }
+
+export { decodeEntities, findEmailCode, findVerifyLink, htmlToText, parseEmail, trimSnippet, type EmailInput, type EmailOtp } from "./email.js";

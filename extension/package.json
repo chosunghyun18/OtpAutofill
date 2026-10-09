@@ -5,10 +5,13 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
+    "build:e2e": "node build.mjs --e2e",
+    "build:v1": "node build.mjs --v1",
     "watch": "node build.mjs --watch"
   },
   "dependencies": {
     "@otp-autofill/otp-parser": "*",
-    "@otp-autofill/protocol": "*"
+    "@otp-autofill/protocol": "*",
+    "tldts": "^7.4.18"
   }
 }

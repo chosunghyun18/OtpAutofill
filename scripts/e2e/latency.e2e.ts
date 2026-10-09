@@ -11,7 +11,7 @@ import { createRelayServer } from "../../relay/src/server.js";
 
 // 스크린샷은 저장소 밖(OS 임시 폴더)에 남긴다
 const OUT = mkdtempSync(join(tmpdir(), "otp-e2e-shots-")) + "/";
-const EXT = new URL("../../extension/dist", import.meta.url).pathname;
+const EXT = new URL("../../extension/dist-v1", import.meta.url).pathname;
 const RELAY = "http://localhost:8787";
 const results: { name: string; ok: boolean; detail?: string }[] = [];
 const check = (name: string, ok: boolean, detail?: string) => {

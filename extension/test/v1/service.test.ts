@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectService } from "../src/service.js";
+import { detectService } from "../../src/v1/service.js";
 
 describe("detectService", () => {
   it("국내 [Web발신] [서비스] 형식", () => {

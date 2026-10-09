@@ -1,121 +1,150 @@
 /**
- * Content script — OTP 입력칸을 찾고, 코드가 있으면 입력칸 옆에 "인증번호 입력" 칩을 띄운다.
+ * Content script (v2) — 감시 트리거 감지, 입력칸 probe, background 지시에 따른 입력, 칩.
  *
  * 보안 원칙
- * - 칩에는 코드 숫자를 표시하지 않는다(●●●●●●). 클릭 전에는 페이지 DOM에 코드가 존재하지 않는다.
- * - 클릭(isTrusted) 시에만 background에 코드를 요청(otp:take). 허용 여부는 background가 sender.url로 판단.
- * - 칩은 closed shadow DOM에 그린다.
+ * - 입력 허용 판단은 background가 sender.url로 한다. 여기서는 지시받은 origin과 지금 문서가 같을 때만 입력한다.
+ * - 클릭 전 페이지 DOM에 코드를 넣지 않는다. 칩은 ●만 표시하고 isTrusted 클릭만 받는다.
+ * - 사용자 활성화가 없는 트리거는 기존 세션 연장만 한다(페이지가 감시를 마음대로 켜지 못하게) — background가 판단.
  */
-import { findSplitGroups, isOtpInput, splitCode, type InputLike } from "./detect.js";
+import { splitCode } from "./detect.js";
+import { findTarget, type Target } from "./dom.js";
 import { fillSingle, fillSplit } from "./fill.js";
-import type { ExtMessage, QueryResponse } from "./messages.js";
-import type { FillWarning } from "./origin.js";
-
-type Target = { kind: "single"; el: HTMLInputElement } | { kind: "split"; els: HTMLInputElement[] };
-
-function toInputLike(el: HTMLInputElement): InputLike {
-  return {
-    type: el.type,
-    autocomplete: el.getAttribute("autocomplete") ?? "",
-    name: el.name,
-    id: el.id,
-    className: typeof el.className === "string" ? el.className : "",
-    placeholder: el.placeholder,
-    ariaLabel: el.getAttribute("aria-label") ?? "",
-    inputMode: el.inputMode,
-    maxLength: el.maxLength,
-  };
-}
-
-const parentKeys = new WeakMap<Element, string>();
-let keySeq = 0;
-function groupKeyOf(el: HTMLInputElement): string {
-  // 분할 입력칸은 보통 2단계 이내의 공통 조상 아래에 있다
-  const anchor = el.parentElement?.parentElement ?? el.parentElement ?? document.body;
-  let k = parentKeys.get(anchor);
-  if (!k) parentKeys.set(anchor, (k = String(keySeq++)));
-  return k;
-}
-
-function isVisible(el: HTMLElement): boolean {
-  const r = el.getBoundingClientRect();
-  return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden";
-}
-
-function findTarget(): Target | null {
-  const inputs = Array.from(document.querySelectorAll<HTMLInputElement>("input")).filter(
-    (el) => !el.disabled && !el.readOnly && isVisible(el),
-  );
-  const single = inputs.find((el) => isOtpInput(toInputLike(el)));
-  if (single) return { kind: "single", el: single };
-  const groups = findSplitGroups(
-    inputs.map((el) => ({ maxLength: el.maxLength, type: el.type, groupKey: groupKeyOf(el) })),
-  );
-  const g = groups[0];
-  return g ? { kind: "split", els: g.map((i) => inputs[i]!) } : null;
-}
+import { removeChip, showChip } from "./chip.js";
+import type { ExtMessage } from "./messages.js";
+import { hasVerifySentText, isEmailField, shouldSend } from "./triggers.js";
+import type { TriggerReason } from "./watch.js";
 
 const send = <T>(msg: ExtMessage) => chrome.runtime.sendMessage(msg) as Promise<T>;
 
-let chipHost: HTMLElement | null = null;
-function removeChip() {
-  chipHost?.remove();
-  chipHost = null;
+function fill(target: Target, code: string): boolean {
+  quietUntil = Date.now() + 60_000;
+  if (target.kind === "single") {
+    fillSingle(target.el, code);
+    return true;
+  }
+  const digits = splitCode(code, target.els.length);
+  if (!digits) return false;
+  fillSplit(target.els, digits);
+  return true;
 }
 
-function showChip(target: Target, length: number, warning?: FillWarning) {
-  removeChip();
-  const anchor = target.kind === "single" ? target.el : target.els[0]!;
-  const rect = anchor.getBoundingClientRect();
-  chipHost = document.createElement("div");
-  Object.assign(chipHost.style, {
-    position: "fixed",
-    top: `${Math.max(0, rect.top - 34)}px`,
-    left: `${rect.left}px`,
-    zIndex: "2147483647",
-  });
-  const root = chipHost.attachShadow({ mode: "closed" });
-  const btn = document.createElement("button");
-  btn.textContent = `인증번호 입력 (${"●".repeat(length)}) · ${location.hostname}`;
-  // 문자 속 서비스와 현재 사이트가 다르면 경고만 한다 (차단 아님 — SSO·제휴 로그인 대비)
-  if (warning) btn.textContent = `⚠ 문자 발신: ${warning.service} · 이 사이트가 맞는지 확인 — ${btn.textContent}`;
-  btn.setAttribute(
-    "style",
-    `font:12px system-ui;padding:4px 10px;border-radius:14px;border:${warning ? "2px solid #e8710a" : "1px solid #888"};` +
-      "background:#fff;color:#111;cursor:pointer",
+// ---------- 트리거 ----------
+
+const lastSent: Partial<Record<TriggerReason, number>> = {};
+/** 입력 직후에는 트리거하지 않는다 (입력하며 생긴 포커스·DOM 변화로 감시가 다시 켜지지 않게) */
+let quietUntil = 0;
+
+function trigger(reason: TriggerReason) {
+  const now = Date.now();
+  if (now < quietUntil && reason !== "manual") return;
+  if (reason !== "manual" && !shouldSend(lastSent, reason, now)) return;
+  lastSent[reason] = now;
+  const activated = reason === "manual" || (navigator.userActivation?.hasBeenActive ?? false);
+  send({ type: "watch:start", reason, activated }).catch(() => undefined);
+}
+
+function hasEmailField(root: ParentNode, filledOnly = false): boolean {
+  return Array.from(root.querySelectorAll<HTMLInputElement>("input")).some(
+    (el) =>
+      (!filledOnly || el.value.includes("@")) &&
+      isEmailField({
+        type: el.type,
+        name: el.name,
+        id: el.id,
+        autocomplete: el.getAttribute("autocomplete") ?? "",
+        placeholder: el.placeholder,
+      }),
   );
-  btn.addEventListener("click", async (ev) => {
-    if (!ev.isTrusted) return; // 페이지 스크립트의 합성 클릭 무시
-    const res = await send<QueryResponse & { code?: string }>({ type: "otp:take" });
-    removeChip();
-    if (!res.code) return;
-    if (target.kind === "single") fillSingle(target.el, res.code);
-    else {
-      const digits = splitCode(res.code, target.els.length);
-      if (digits) fillSplit(target.els, digits);
-    }
-  });
-  root.append(btn);
-  document.documentElement.append(chipHost);
 }
 
-async function refresh() {
+// 이메일 입력칸이 있는 폼 제출
+document.addEventListener(
+  "submit",
+  (e) => {
+    if (e.target instanceof HTMLFormElement && hasEmailField(e.target)) trigger("form");
+  },
+  true,
+);
+// submit 이벤트 없이 버튼으로 보내는 SPA — 버튼이 속한 폼에 이메일 칸이 있거나, 폼이 없으면 값이 채워진 이메일 칸이 있을 때
+document.addEventListener(
+  "click",
+  (e) => {
+    if (!e.isTrusted || !(e.target instanceof Element)) return;
+    const btn = e.target.closest("button, input[type=submit], [role=button]");
+    if (!btn) return;
+    const form = btn.closest("form");
+    if (form ? hasEmailField(form) : hasEmailField(document, true)) trigger("form");
+  },
+  true,
+);
+
+// 인증번호 입력칸 등장 · "인증 메일을 보냈습니다" 문구 — DOM 변화를 묶어서 본다
+let scanTimer: ReturnType<typeof setTimeout> | undefined;
+function scan() {
+  scanTimer = undefined;
+  if (findTarget()) trigger("input");
+  const text = document.body?.innerText?.slice(0, 50_000) ?? "";
+  if (hasVerifySentText(text)) trigger("text");
+}
+new MutationObserver(() => {
+  scanTimer ??= setTimeout(scan, 500);
+}).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+scan();
+
+// ---------- 칩 ----------
+
+async function chipIfReady() {
   const target = findTarget();
   if (!target) return removeChip();
-  const res = await send<QueryResponse>({ type: "otp:query" });
-  if (!res?.decision?.allow || !res.length) {
-    if (res?.decision && !res.decision.allow && res.decision.reason === "origin-mismatch") {
-      console.warn("[OTP Autofill] 이 사이트는 문자에 명시된 도메인과 다릅니다. 입력을 차단했습니다.");
-    }
-    return removeChip();
-  }
-  showChip(target, res.length, res.decision.warning);
+  const res = await send<{ length?: number } | null>({ type: "otp:query" }).catch(() => null);
+  if (!res?.length) return removeChip();
+  showChipFor(target, res.length);
 }
 
-chrome.runtime.onMessage.addListener((msg: ExtMessage) => {
-  if (msg.type === "otp:available") void refresh();
-});
+function showChipFor(target: Target, length: number) {
+  showChip(target, length, async () => {
+    const res = await send<{ code?: string }>({ type: "otp:take" }).catch(() => null);
+    removeChip();
+    if (res?.code) fill(target, res.code);
+  });
+}
+
 document.addEventListener("focusin", (e) => {
-  if (e.target instanceof HTMLInputElement) void refresh();
+  if (!(e.target instanceof HTMLInputElement) || !e.isTrusted) return;
+  const target = findTarget();
+  if (!target) return;
+  const els = target.kind === "single" ? [target.el] : target.els;
+  if (!els.includes(e.target)) return;
+  // 입력칸 포커스: 감시 시작/연장 + 즉시 1회 조회, 대기 코드가 있으면 칩
+  trigger("focus");
+  void chipIfReady();
 });
-void refresh();
+
+// ---------- background 지시 ----------
+
+chrome.runtime.onMessage.addListener((msg: ExtMessage, _sender, sendResponse) => {
+  switch (msg.type) {
+    case "fill:probe":
+      send({ type: "fill:probe-reply", nonce: msg.nonce, hasInput: findTarget() !== null }).catch(() => undefined);
+      return;
+    case "fill:code": {
+      // 확인 이후 프레임이 다른 문서로 바뀌었으면 입력하지 않는다
+      const target = location.origin === msg.origin ? findTarget() : null;
+      const filled = target ? fill(target, msg.code) : false;
+      if (filled) removeChip();
+      sendResponse({ filled });
+      return;
+    }
+    case "chip:show": {
+      const target = findTarget();
+      if (target) showChipFor(target, msg.length);
+      return;
+    }
+    case "otp:available":
+      void chipIfReady();
+      return;
+    case "watch:ask":
+      if (window === window.top) trigger("manual");
+      return;
+  }
+});

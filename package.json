@@ -14,8 +14,9 @@
     "build:ext": "npm run build -w extension",
     "relay": "npm run dev -w relay",
     "fake-phone": "tsx scripts/fake-phone.ts",
-    "e2e": "npm run build:ext && tsx scripts/e2e/browser.e2e.ts",
-    "e2e:latency": "npm run build:ext && tsx scripts/e2e/latency.e2e.ts"
+    "e2e": "npm run build:e2e -w extension && tsx scripts/e2e/email.e2e.ts",
+    "e2e:v1": "npm run build:v1 -w extension && tsx scripts/e2e/browser.e2e.ts",
+    "e2e:v1:latency": "npm run build:v1 -w extension && tsx scripts/e2e/latency.e2e.ts"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.270",

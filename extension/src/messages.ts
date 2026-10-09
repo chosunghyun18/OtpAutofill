@@ -1,51 +1,47 @@
-/** background ↔ content/popup 내부 메시지 */
-import type { FillDecision } from "./origin.js";
-import type { ServiceHint } from "./service.js";
+/** background ↔ content/popup/offscreen 내부 메시지 (v2) */
+import type { TriggerReason } from "./watch.js";
 
-export interface LatestOtp {
-  code: string;
-  boundOrigin?: string;
-  sender?: string;
-  /** 문자에서 찾은 서비스명·도메인 (불일치 경고용) */
-  service?: ServiceHint;
-  receivedAt: number;
+export type ExtMessage =
+  /** content: 감시 시작·연장. activated = 이 프레임에 사용자 활성화가 있었는지 (없으면 기존 세션 연장만) */
+  | { type: "watch:start"; reason: TriggerReason; activated: boolean }
+  /** background → content(최상위 프레임): 팝업 "지금 확인" */
+  | { type: "watch:ask" }
+  /** content: 이 프레임에 입력 가능한 대기 코드가 있는지 (코드는 받지 않음) */
+  | { type: "otp:query" }
+  /** content: 칩 클릭(isTrusted) 후 코드 요청. background가 sender.url로 다시 판단 */
+  | { type: "otp:take" }
+  /** background → content: 이 탭의 코드 도착 (코드 미포함) */
+  | { type: "otp:available" }
+  /** background → 탭의 모든 프레임: 입력칸 있는지 */
+  | { type: "fill:probe"; nonce: string }
+  /** content → background: probe 회신. 프레임 URL은 background가 sender.url로 얻는다 */
+  | { type: "fill:probe-reply"; nonce: string; hasInput: boolean }
+  /** background → 한 프레임: 입력. origin이 지금 문서와 다르면 입력하지 않는다 */
+  | { type: "fill:code"; code: string; origin: string }
+  /** background → 프레임: 칩 표시 (정책 통과 프레임이 여럿일 때) */
+  | { type: "chip:show"; length: number }
+  // 팝업 전용
+  | { type: "popup:state" }
+  | { type: "gmail:connect" }
+  | { type: "gmail:disconnect" }
+  | { type: "watch:now" }
+  | { type: "settings:set"; mask: boolean }
+  /** background → offscreen */
+  | { type: "offscreen:copy"; text: string };
+
+export interface PopupItem {
+  id: string;
+  kind: "code" | "link";
+  value: string;
+  site: string;
+  authenticated: boolean;
   expiresAt: number;
 }
 
-export type ExtMessage =
-  /** content: 이 프레임에 입력 가능한지만 묻는다 (코드는 받지 않음) */
-  | { type: "otp:query" }
-  /** content: 사용자 클릭 후 실제 코드 요청. 성공 시 background가 코드를 소진 처리 */
-  | { type: "otp:take" }
-  /** popup 전용: 최근 코드 표시/복사 */
-  | { type: "otp:peek" }
-  /** background → content: 새 코드 도착 알림 (코드 미포함) */
-  | { type: "otp:available" }
-  | { type: "pair:start"; relayUrl: string }
-  | { type: "pair:status" }
-  /** popup 전용: 안전번호 비교 결과. false면 페어링 해제 */
-  | { type: "pair:confirm"; match: boolean; channelId: string; safetyNumber: string }
-  | { type: "pair:revoke" };
-
-export interface QueryResponse {
-  decision: FillDecision | null;
-  length?: number;
+export interface PopupState {
+  connected: boolean;
+  authError: boolean;
+  watching: number;
+  mask: boolean;
+  items: PopupItem[];
 }
-
-export interface PairState {
-  relayUrl?: string;
-  channelId?: string;
-  browserToken?: string;
-  pairingCode?: string;
-  pairingExpiresAt?: number;
-  /** 처음 받은 폰 공개키 — 공개(reveal) 전에 고정해 재시도 때 바꿔치기를 막는다 */
-  peerPublicKey?: string;
-  safetyNumber?: string;
-  /** 채널 키 유도 완료 */
-  paired: boolean;
-  /** 사용자가 팝업에서 안전번호 일치를 확인함. true일 때만 수신한다 */
-  verified?: boolean;
-}
-
-/** 코드 유효시간 — 폰 수신 시각 기준 3분 */
-export const OTP_TTL_MS = 3 * 60_000;

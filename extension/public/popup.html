@@ -4,35 +4,32 @@
     <meta charset="utf-8" />
     <title>OTP Autofill</title>
     <style>
-      body { font: 13px system-ui, sans-serif; width: 280px; margin: 12px; }
-      .code { font: 600 28px ui-monospace, monospace; letter-spacing: 4px; }
+      body { font: 13px system-ui, sans-serif; width: 300px; margin: 12px; color: #111; }
       .muted { color: #666; }
       .warn { color: #b00020; }
-      button { margin-top: 6px; }
-      section { margin-bottom: 14px; }
-      input { width: 100%; box-sizing: border-box; }
+      .code { font: 600 22px ui-monospace, monospace; letter-spacing: 3px; }
+      section { margin-bottom: 12px; }
+      ul { list-style: none; padding: 0; margin: 6px 0; }
+      li { border: 1px solid #ddd; border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; }
+      li .link { word-break: break-all; font-size: 12px; }
+      button { margin-top: 4px; }
     </style>
   </head>
   <body>
-    <section id="latest">
-      <div class="muted">최근 인증번호</div>
-      <div class="code" id="code">—</div>
-      <div class="muted" id="meta"></div>
-      <button id="copy" disabled>복사</button>
+    <section>
+      <div id="status" class="muted">확인 중…</div>
+      <button id="connect" hidden>Gmail 연결</button>
+      <button id="disconnect" hidden>연결 해제</button>
+      <button id="check" hidden>지금 확인</button>
     </section>
-    <section id="pairing">
-      <div class="muted">릴레이 서버</div>
-      <input id="relay" value="http://localhost:8787" />
-      <button id="pair">폰 페어링 시작</button>
-      <button id="unpair" hidden>페어링 해제</button>
-      <div id="pairStatus"></div>
-      <div id="verify" hidden>
-        <div>폰 화면의 안전번호와 같습니까?</div>
-        <div class="code" id="sn"></div>
-        <button id="match">일치함</button>
-        <button id="mismatch">다름 · 취소</button>
-      </div>
-      <div id="notice" class="warn"></div>
+    <section>
+      <div class="muted">최근 인증 메일</div>
+      <ul id="items"></ul>
+      <div id="empty" class="muted">없음</div>
+    </section>
+    <section class="muted">
+      <label><input type="checkbox" id="mask" /> 알림에서 인증번호 가리기</label>
+      <div id="notifHint">알림이 안 보이면 macOS 시스템 설정 › 알림 › Google Chrome 을 확인하세요.</div>
     </section>
     <script src="popup.js"></script>
   </body>

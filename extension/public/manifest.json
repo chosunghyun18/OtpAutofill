@@ -1,18 +1,46 @@
 {
   "manifest_version": 3,
   "name": "OTP Autofill",
-  "version": "0.0.1",
-  "description": "휴대폰으로 받은 인증번호를 크롬에서 클릭 한 번으로 입력합니다 (종단간 암호화).",
+  "version": "0.1.0",
+  "description": "사이트 인증 메일의 인증번호·링크를 Gmail에서 찾아 알림으로 보여 주고, 알림을 누르면 그 사이트 입력칸에 넣습니다.",
   "minimum_chrome_version": "120",
-  "permissions": ["storage", "alarms"],
-  "host_permissions": ["http://localhost:8787/*"],
-  "optional_host_permissions": ["https://*/*"],
-  "background": { "service_worker": "background.js", "type": "module" },
-  "action": { "default_popup": "popup.html", "default_title": "OTP Autofill" },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqqCWcRvChftTzeOjYzBnJJeXMo3knuiSshx/rSAYP5JR0GpYp5sJ+TwMqa+y/oiIzqPwgQQTGlu7YffI2KBAQYFOHG7cobFA2JWwvl4dpWyqyFdCu6nS48/Sd9OaeadBdAoFHDALgmMewPIbGxqss+gYqtdApe02FGs8aI82pVORKVqaNdD0F1cOOQH8GhZkYsHbSZrnGmoPoQBl0UVFdVaRL4eNWB/M1Zq9DcCqczI1XJiHUax7vSJ2XGGEK5pthGO/7p1u+Y3ayQqYyL8pscYrKR5M5524mAGWDMhnlwwz41J1mh9TEbEruumWBl7+8kTtmW3EwPMqoXVXyba3/wIDAQAB",
+  "icons": {
+    "128": "icon128.png"
+  },
+  "permissions": [
+    "identity",
+    "notifications",
+    "storage",
+    "alarms",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "https://gmail.googleapis.com/*",
+    "https://oauth2.googleapis.com/*"
+  ],
+  "oauth2": {
+    "client_id": "REPLACE_WITH_OAUTH_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/gmail.readonly"
+    ]
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "OTP Autofill"
+  },
   "content_scripts": [
     {
-      "matches": ["https://*/*", "http://localhost/*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "all_frames": true,
       "run_at": "document_idle"
     }

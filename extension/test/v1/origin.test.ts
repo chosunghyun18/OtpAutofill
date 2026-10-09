@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decideFill, hostMatches } from "../src/origin.js";
+import { decideFill, hostMatches } from "../../src/v1/origin.js";
 
 const now = 1_000_000;
 const live = { expiresAt: now + 60_000, now };

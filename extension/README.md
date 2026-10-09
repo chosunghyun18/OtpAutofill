@@ -1,36 +1,37 @@
 # extension (Chrome MV3)
 
 ```bash
-npm run build:ext   # 루트에서 → extension/dist
+npm run build:ext                  # 루트에서 → extension/dist (실사용)
+npm run build:e2e -w extension     # → dist-e2e (목 Gmail :8790, 고정 토큰, 테스트 훅 __e2e, 폴링 300ms)
+npm run build:v1 -w extension      # → dist-v1 (보류된 v1 SMS 경로)
 npm run watch -w extension
 ```
 
 | 파일 | 역할 |
 |---|---|
-| `src/background.ts` | 페어링, 릴레이 long-poll(+30초 alarm으로 재기동), 복호화, 파싱, 코드 보관·정책 판단 |
-| `src/content.ts` | OTP 입력칸 탐지 → "인증번호 입력(●●●●●●)" 칩 → 클릭 시 코드 요청·입력 |
-| `src/popup.ts` | 최근 코드 표시/복사, 페어링 시작/해제, 안전번호 확인(일치함/다름) |
-| `src/detect.ts` | 입력칸 점수화(`autocomplete=one-time-code`, name/id/placeholder 힌트), 분할 입력칸 그룹 탐지 — 순수 |
-| `src/origin.ts` | 입력 허용 정책 (origin-bound 일치, https, 만료, 서비스명 불일치 경고) — 순수 |
-| `src/pairing.ts` | 페어링 단계(`unpaired`/`waiting-phone`/`needs-verify`/`active`)·배지 — 순수 |
-| `src/service.ts` | 문자 속 서비스명(`[네이버]` 등) → 도메인 표 — 순수 |
-| `src/keystore.ts` | IndexedDB에 non-extractable CryptoKey 보관 |
+| `src/background.ts` | 토큰, 감시 세션·폴링 루프, 메일 처리, 알림, 클릭 시 프레임 probe → 입력 지시, offscreen 복사, 팝업 응답 |
+| `src/content.ts` | 트리거 감지(이메일 폼 제출·버튼, 입력칸 등장, "인증 메일 발송" 문구, 입력칸 포커스), probe 회신, 입력, 칩 |
+| `src/popup.ts` | Gmail 연결·해제, 최근 항목·복사, 지금 확인, 알림 꺼짐 안내, 코드 마스킹 옵션 |
+| `src/offscreen.ts` | 클립보드 복사 (서비스 워커엔 clipboard 없음) |
+| `src/gmail.ts` | Gmail REST(getProfile·history·messages) + base64url·charset·RFC 2047 디코딩 — 순수 부분 테스트 |
+| `src/mailpolicy.ts` | Authentication-Results 해석, DMARC 정렬 From, eTLD+1(tldts), 입력/열기/복사 판단 — 순수 |
+| `src/watch.ts` | 탭별 세션, 메일↔세션 매칭, 아이템 TTL, 알림 문구·버튼, 입력 프레임 선택 — 순수 |
+| `src/triggers.ts` | 이메일 입력칸·인증 문구 판단, 트리거 쿨다운 — 순수 |
+| `src/detect.ts` `dom.ts` `fill.ts` `chip.ts` | 입력칸 탐지(순수)·DOM 헬퍼·React 대응 입력·칩 |
+| `src/v1/` | 보류된 v1 진입점과 순수 로직 (페어링·릴레이 수신) |
 
-## 페어링 흐름
+## 흐름
 
-1. 팝업 "폰 페어링 시작" → 공개키 커밋만 릴레이에 등록, 페어링 코드 표시
-2. 폰 join → 브라우저가 폰 공개키 수신 → 자기 공개키 공개 → 채널 키 유도
-3. 팝업에 안전번호 + [일치함] [다름 · 취소], 배지 `?`. **일치함을 누르기 전에는 릴레이에서 메시지를 가져오지 않는다.**
-   다름이면 즉시 해제.
-
-## 입력 흐름
-
-1. 새 코드 도착 → 배지 `OTP` + 활성 탭에 `otp:available` (코드 미포함)
-2. content가 입력칸을 찾으면 `otp:query` → background가 `sender.url`로 정책 판단 → 허용이면 자릿수만 응답
-3. 사용자가 칩 클릭(`isTrusted`) → `otp:take` → background가 다시 판단 후 코드 전달·즉시 삭제 → 입력
-4. 문자에 알려진 서비스명이 있는데 현재 사이트가 그 도메인이 아니면 칩에 주황 테두리 경고 (입력은 허용)
+1. content 트리거 → `watch:start {reason, activated}` → background가 `sender.tab.id`·`sender.url`로 탭별 세션(10분).
+   사용자 활성화가 없는 트리거는 기존 세션 연장만 한다.
+2. 세션 시작 때 `getProfile`의 historyId를 저장하고, 최근 메일 5개 중 2분 안에 온 것도 1회 확인(늦은 트리거 대비).
+3. 폴링: `history.list(messageAdded)` → 새 메일 metadata(From·Subject·Authentication-Results·snippet) →
+   From 사이트가 세션과 맞을 때만 파싱(제목·snippet → 실패 시 full 본문). 맞지 않으면 버린다.
+4. 알림(본문 클릭 = 기본). 클릭 → 탭·창 앞으로 → `fill:probe`를 모든 프레임에 → 회신의 `sender.url/frameId/documentId`로
+   `planFill` → 통과 프레임이 하나면 그 문서에만 `fill:code` (content는 origin이 같을 때만 입력), 여럿이면 칩, 없으면 복사(+경고).
+5. 사용하면 아이템·알림·세션 삭제. 30초 alarm이 TTL 정리와 워커 재기동을 맡는다.
 
 ## 알려진 한계
-- MV3 서비스 워커가 종료되면 30초 alarm까지 수신이 멈춘다. 다만 사용자가 OTP 입력칸에 포커스하면 content의 조회가 워커를 깨워
-  즉시 수신을 재개한다. 실측(2026-10-09, `npm run e2e:latency`): 활성 ≈60ms, 워커 강제 종료 후 포커스 시 ≈130ms, 포커스 없으면 최대 ≈29초.
-- 교차 출처 iframe(결제창 등) 내부 입력칸은 `all_frames`로 동작하지만 정책은 iframe의 URL 기준.
+- 헤드리스 E2E는 OS 알림을 누를 수 없어 e2e 훅으로 같은 핸들러를 부른다. 실제 크롬 알림 클릭·macOS 배너 동작은 사람이 확인해야 한다(P2).
+- `oauth2.client_id`는 자리표시자다. 실제 Gmail 연결은 P2(OAuth 클라이언트 발급) 이후.
+- 코드는 숫자 4~8자리만, 발신 도메인 ≠ 사이트 도메인인 서비스(Cognito·Firebase 등)는 복사만 된다(P3 정적 별칭 표).
