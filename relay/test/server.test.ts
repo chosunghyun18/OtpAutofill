@@ -1,12 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AddressInfo } from "node:net";
 import {
+  commitPublicKey,
   deriveChannelKey,
   exportPublicKey,
   generateKeyPair,
   importPublicKey,
   openEnvelope,
   sealPayload,
+  verifyCommitment,
 } from "@otp-autofill/protocol";
 import { createRelayServer } from "../src/server.js";
 
@@ -33,19 +35,35 @@ describe("relay HTTP — 페어링부터 E2E 전달까지", () => {
     const browser = await generateKeyPair();
     const phone = await generateKeyPair();
 
-    const created = await call("POST", "/v1/pairings", { publicKey: await exportPublicKey(browser.publicKey) });
+    const browserPub = await exportPublicKey(browser.publicKey);
+    const phonePub = await exportPublicKey(phone.publicKey);
+
+    // 1) 브라우저는 커밋만 올린다
+    const created = await call("POST", "/v1/pairings", { commitment: await commitPublicKey(browserPub) });
     expect(created.status).toBe(201);
     const { pairingCode, channelId, browserToken } = created.json;
 
-    const joined = await call("POST", `/v1/pairings/${pairingCode}/join`, {
-      publicKey: await exportPublicKey(phone.publicKey),
-    });
+    // 2) 폰 join → 커밋을 받는다 (브라우저 공개키는 아직 모름)
+    const joined = await call("POST", `/v1/pairings/${pairingCode}/join`, { publicKey: phonePub });
     expect(joined.status).toBe(200);
+    expect(joined.json.peerPublicKey).toBeUndefined();
+    expect((await call("GET", `/v1/pairings/${pairingCode}/reveal`, undefined, joined.json.phoneToken)).json).toEqual({
+      status: "waiting",
+    });
 
+    // 3) 브라우저가 폰 키를 받은 뒤 자기 키 공개
     const polled = await call("GET", `/v1/pairings/${pairingCode}`, undefined, browserToken);
-    expect(polled.json.status).toBe("joined");
+    expect(polled.json).toEqual({ status: "joined", peerPublicKey: phonePub });
+    expect((await call("POST", `/v1/pairings/${pairingCode}/reveal`, { publicKey: browserPub }, browserToken)).status).toBe(
+      204,
+    );
 
-    const phoneKey = await deriveChannelKey(phone.privateKey, await importPublicKey(joined.json.peerPublicKey), channelId);
+    // 4) 폰이 공개키를 받아 커밋과 대조
+    const revealed = await call("GET", `/v1/pairings/${pairingCode}/reveal`, undefined, joined.json.phoneToken);
+    expect(revealed.json.status).toBe("revealed");
+    expect(await verifyCommitment(revealed.json.peerPublicKey, joined.json.commitment)).toBe(true);
+
+    const phoneKey = await deriveChannelKey(phone.privateKey, await importPublicKey(revealed.json.peerPublicKey), channelId);
     const browserKey = await deriveChannelKey(
       browser.privateKey,
       await importPublicKey(polled.json.peerPublicKey),
@@ -70,7 +88,7 @@ describe("relay HTTP — 페어링부터 E2E 전달까지", () => {
   });
 
   it("잘못된 공개키·토큰은 거부한다", async () => {
-    expect((await call("POST", "/v1/pairings", { publicKey: "short" })).status).toBe(400);
+    expect((await call("POST", "/v1/pairings", { commitment: "short" })).status).toBe(400);
     expect((await call("GET", "/v1/channels/nope/messages", undefined, "bad")).status).toBe(401);
   });
 });

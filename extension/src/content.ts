@@ -9,6 +9,7 @@
 import { findSplitGroups, isOtpInput, splitCode, type InputLike } from "./detect.js";
 import { fillSingle, fillSplit } from "./fill.js";
 import type { ExtMessage, QueryResponse } from "./messages.js";
+import type { FillWarning } from "./origin.js";
 
 type Target = { kind: "single"; el: HTMLInputElement } | { kind: "split"; els: HTMLInputElement[] };
 
@@ -62,7 +63,7 @@ function removeChip() {
   chipHost = null;
 }
 
-function showChip(target: Target, length: number) {
+function showChip(target: Target, length: number, warning?: FillWarning) {
   removeChip();
   const anchor = target.kind === "single" ? target.el : target.els[0]!;
   const rect = anchor.getBoundingClientRect();
@@ -76,9 +77,12 @@ function showChip(target: Target, length: number) {
   const root = chipHost.attachShadow({ mode: "closed" });
   const btn = document.createElement("button");
   btn.textContent = `인증번호 입력 (${"●".repeat(length)}) · ${location.hostname}`;
+  // 문자 속 서비스와 현재 사이트가 다르면 경고만 한다 (차단 아님 — SSO·제휴 로그인 대비)
+  if (warning) btn.textContent = `⚠ 문자 발신: ${warning.service} · 이 사이트가 맞는지 확인 — ${btn.textContent}`;
   btn.setAttribute(
     "style",
-    "font:12px system-ui;padding:4px 10px;border-radius:14px;border:1px solid #888;background:#fff;color:#111;cursor:pointer",
+    `font:12px system-ui;padding:4px 10px;border-radius:14px;border:${warning ? "2px solid #e8710a" : "1px solid #888"};` +
+      "background:#fff;color:#111;cursor:pointer",
   );
   btn.addEventListener("click", async (ev) => {
     if (!ev.isTrusted) return; // 페이지 스크립트의 합성 클릭 무시
@@ -105,7 +109,7 @@ async function refresh() {
     }
     return removeChip();
   }
-  showChip(target, res.length);
+  showChip(target, res.length, res.decision.warning);
 }
 
 chrome.runtime.onMessage.addListener((msg: ExtMessage) => {

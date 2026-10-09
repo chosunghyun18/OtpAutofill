@@ -8,7 +8,8 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build:ext": "npm run build -w extension",
-    "relay": "npm run dev -w relay"
+    "relay": "npm run dev -w relay",
+    "fake-phone": "tsx scripts/fake-phone.ts"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.270",

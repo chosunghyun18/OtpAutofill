@@ -41,4 +41,27 @@ describe("decideFill", () => {
   it("만료된 코드는 거부", () => {
     expect(decideFill({ pageUrl: "https://a.com", expiresAt: now, now })).toEqual({ allow: false, reason: "expired" });
   });
+
+  it("서비스명과 다른 사이트면 허용하되 경고, 같은 서비스(하위 도메인)면 경고 없음", () => {
+    const service = { name: "네이버", domains: ["naver.com"] };
+    expect(decideFill({ pageUrl: "https://naver-login.xyz", service, ...live })).toEqual({
+      allow: true,
+      requiresClick: true,
+      reason: "no-origin-hint",
+      warning: { kind: "service-mismatch", service: "네이버" },
+    });
+    expect(decideFill({ pageUrl: "https://nid.naver.com/login", service, ...live })).toEqual({
+      allow: true,
+      requiresClick: true,
+      reason: "no-origin-hint",
+    });
+  });
+
+  it("origin-bound가 있으면 서비스명보다 origin 판단이 우선", () => {
+    const service = { name: "네이버", domains: ["naver.com"] };
+    expect(decideFill({ pageUrl: "https://example.com", boundOrigin: "example.com", service, ...live })).toMatchObject({
+      allow: true,
+      reason: "origin-match",
+    });
+  });
 });

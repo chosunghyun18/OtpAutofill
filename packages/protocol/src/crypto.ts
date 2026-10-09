@@ -5,6 +5,11 @@
  * 2. ECDH 공유 비밀 → HKDF-SHA256(salt=channelId, info=HKDF_INFO) → AES-GCM-256 키
  * 3. 메시지마다 랜덤 12바이트 IV, AAD = channelId (다른 채널로 옮겨 붙이기 방지)
  * 4. 페어링 시 양쪽 화면에 safety number를 띄워 사용자가 일치 여부를 확인 (릴레이 MITM 방어)
+ *
+ * 커밋-공개(commit-reveal): 안전번호가 32비트라, 릴레이가 브라우저 공개키를 먼저 알면 가짜 키를 바꿔 가며
+ * 양쪽 안전번호가 같아지는 조합을 몇 초 만에 찾을 수 있다. 그래서 브라우저는 처음에 공개키의 해시만 올리고,
+ * 폰 공개키를 받은 뒤에야 원래 키를 공개한다. 폰은 해시와 맞는지 확인한다. 릴레이는 양쪽에 줄 가짜 키를
+ * 브라우저 키를 보기 전에 정해야 하므로, 성공 확률이 시도당 2^-32로 떨어진다 (블루투스 숫자 비교·ZRTP 방식).
  */
 import type { Envelope, OtpPayload } from "./types.js";
 import { PAYLOAD_MAX_AGE_MS } from "./types.js";
@@ -79,6 +84,17 @@ export async function openEnvelope(
   if (now - payload.receivedAt > PAYLOAD_MAX_AGE_MS) throw new PayloadRejected("만료된 메시지");
   if (payload.receivedAt - now > 60_000) throw new PayloadRejected("미래 시각 메시지");
   return payload;
+}
+
+const COMMIT_PREFIX = "otp-autofill/v1/commit|";
+
+/** 공개키 커밋 = base64url(SHA-256(접두어 + 공개키 base64url)) — 43자 */
+export async function commitPublicKey(publicKey: string): Promise<string> {
+  return toBase64Url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(COMMIT_PREFIX + publicKey)));
+}
+
+export async function verifyCommitment(publicKey: string, commitment: string): Promise<boolean> {
+  return (await commitPublicKey(publicKey)) === commitment;
 }
 
 /**

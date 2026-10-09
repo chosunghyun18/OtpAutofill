@@ -11,6 +11,7 @@
 - `relay/` — Node `node:http` 릴레이, 메모리 전용
 - `extension/` — MV3 확장. `detect.ts`/`origin.ts`는 DOM 없는 순수 로직(테스트 대상), `content.ts`/`background.ts`는 얇은 어댑터
 - `companion/` — SMS 소스 설계 문서 (코드 없음)
+- `scripts/fake-phone.ts` — 폰 시뮬레이터 (Phase 1 개발용, `npm run fake-phone -- <코드>`)
 
 ## 명령
 - `npm test` (vitest, 루트에서 전체) / `npm run typecheck` / `npm run relay` / `npm run build:ext`
@@ -23,4 +24,5 @@
   - 확장은 사용자 클릭 없이 입력하지 않는다. 클릭 전 페이지 DOM에 코드를 넣지 않는다.
   - 입력 허용 판단은 content가 아닌 background에서 `sender.url` 기준으로 한다.
   - 코드는 `chrome.storage.session`에만, TTL 후·사용 후 삭제.
+  - 페어링은 커밋-공개 순서를 지킨다 (브라우저 공개키는 폰 공개키를 받은 뒤에만 공개). 안전번호 확인 전에는 메시지를 가져오지 않는다.
 - 새 의존성은 최소화 (릴레이 런타임 의존성 0 유지).

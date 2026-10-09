@@ -4,9 +4,10 @@
 
 ## 공통 프로토콜 (폰 쪽 책임)
 
-1. 페어링: 사용자가 크롬 팝업의 페어링 코드(이후 QR)를 입력 → ECDH P-256 키 생성 → `POST /v1/pairings/:code/join {publicKey}`
-2. 응답의 `peerPublicKey`로 채널 키 유도 (`packages/protocol/src/crypto.ts`와 동일: HKDF-SHA256, salt=channelId, info=`otp-autofill/v1/aes-gcm`)
-3. 화면에 안전번호(XXXX-XXXX) 표시 → 사용자가 크롬 팝업과 비교
+1. 페어링: 사용자가 크롬 팝업의 페어링 코드(이후 QR)를 입력 → ECDH P-256 키 생성 → `POST /v1/pairings/:code/join {publicKey}` → 응답의 `commitment` 보관
+2. `GET /v1/pairings/:code/reveal`(phoneToken)을 `revealed`가 될 때까지 폴링 → 받은 브라우저 공개키가 `commitment`와 맞는지 확인
+   (`verifyCommitment`, 다르면 페어링 중단 = 릴레이 MITM). 맞으면 채널 키 유도 (`packages/protocol/src/crypto.ts`와 동일: HKDF-SHA256, salt=channelId, info=`otp-autofill/v1/aes-gcm`)
+3. 화면에 안전번호(XXXX-XXXX) 표시 → 사용자가 크롬 팝업과 비교. 크롬은 사용자가 [일치함]을 눌러야 수신을 시작한다
 4. SMS 수신 시 `OtpPayload{v:1, msgId, text, sender?, receivedAt}` → AES-GCM(AAD=channelId) → `POST /v1/channels/:id/messages`
 
 **보낼 문자 필터**: 모든 SMS를 보내지 않는다. 폰에서 인증 키워드(인증번호/verification code 등)가 있는 문자만 전송한다 — 개인 문자가 기기 밖으로 나가는 범위를 최소화.
@@ -30,6 +31,12 @@ iOS 앱은 SMS를 읽을 수 없다. **단축어(Shortcuts) 개인용 자동화*
   3. 평문 전송 옵트인 — **기본값 금지**, 위협 모델상 릴레이 탈취 시 노출
 - Phase 3에서 1번을 우선 검증한다.
 
-## 폰 시뮬레이터 (Phase 1 개발용, 예정)
+## 폰 시뮬레이터 (Phase 1 개발용)
 
-`scripts/fake-phone.ts`: 페어링 코드로 join → 안전번호 출력 → 표준입력의 문자열을 암호화 전송. `packages/protocol`을 그대로 사용.
+```bash
+npm run relay                                   # 터미널 1
+npm run fake-phone -- <페어링코드> --sender 네이버   # 터미널 2, 크롬 팝업에서 페어링 시작 후
+```
+
+join → 커밋 확인 → 안전번호 출력 → `y` 확인 → 표준입력 한 줄 = 문자 한 통을 암호화 전송하고 전송 시각(ms)을 출력한다
+(수신→칩 지연 실측용). `packages/protocol`을 그대로 쓴다. 테스트: `scripts/test/fake-phone.test.ts`.

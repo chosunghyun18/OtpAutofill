@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   deriveChannelKey,
   exportPublicKey,
+  commitPublicKey,
   generateKeyPair,
   importPublicKey,
   openEnvelope,
   PayloadRejected,
   safetyNumber,
   sealPayload,
+  verifyCommitment,
   type OtpPayload,
 } from "../src/index.js";
 
@@ -79,5 +81,15 @@ describe("safetyNumber", () => {
     const { phonePub, browserPub } = await pair();
     const mitm = await exportPublicKey((await generateKeyPair()).publicKey);
     expect(await safetyNumber(phonePub, mitm)).not.toBe(await safetyNumber(phonePub, browserPub));
+  });
+});
+
+describe("commitPublicKey", () => {
+  it("공개한 키가 커밋과 같을 때만 통과한다", async () => {
+    const { phonePub, browserPub } = await pair();
+    const c = await commitPublicKey(browserPub);
+    expect(c).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(await verifyCommitment(browserPub, c)).toBe(true);
+    expect(await verifyCommitment(phonePub, c)).toBe(false);
   });
 });

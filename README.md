@@ -40,12 +40,14 @@ npm run typecheck    # tsc --noEmit
 
 npm run relay        # 릴레이 :8787 (PORT 환경변수로 변경)
 npm run build:ext    # extension/dist 생성
+npm run fake-phone -- <페어링코드>   # 폰 시뮬레이터 (companion/README.md)
 ```
 
 확장 로드: `chrome://extensions` → 개발자 모드 → "압축해제된 확장 프로그램을 로드" → `extension/dist`.
-팝업에서 "폰 페어링 시작" → 표시된 페어링 코드를 폰(companion)에 입력 → 양쪽 **안전번호(XXXX-XXXX)** 일치 확인.
+팝업에서 "폰 페어링 시작" → 표시된 페어링 코드를 폰(companion)에 입력 → 양쪽 **안전번호(XXXX-XXXX)** 비교 →
+팝업에서 [일치함]을 눌러야 수신이 시작된다.
 
-폰 앱이 아직 없으므로 Phase 1에서는 `companion/README.md`의 curl/Node 스크립트로 폰 역할을 흉내 낸다.
+폰 앱이 아직 없으므로 Phase 1에서는 `npm run fake-phone`(scripts/fake-phone.ts)으로 폰 역할을 흉내 낸다.
 
 ### 릴레이 기술 선택: Node/TypeScript
 
@@ -58,8 +60,9 @@ npm run build:ext    # extension/dist 생성
 | 위협 | 대응 |
 |---|---|
 | 릴레이 탈취/운영자 열람 | 암호문만 경유, 영속화 없음, 토큰은 해시로만 보관 |
-| 페어링 중 릴레이 MITM | 양쪽 화면 안전번호 비교, 페어링 코드 1회용·5분 |
-| 피싱 사이트에 코드 입력 | 자동 입력 없음·클릭 필수, origin-bound 도메인 불일치 시 차단, https 전용, 클릭 전 코드 미노출 |
+| 페어링 중 릴레이 MITM | 공개키 커밋-공개, 안전번호 확인 버튼 강제, 페어링 코드 1회용·5분 |
+| 페어링 코드 브루트포스 | IP(IPv6 /64)당 분당 10회, 동시 페어링 상한 |
+| 피싱 사이트에 코드 입력 | 자동 입력 없음·클릭 필수, origin-bound 도메인 불일치 시 차단, 서비스명 불일치 경고, https 전용, 클릭 전 코드 미노출 |
 | 페이지 스크립트의 합성 클릭 | `isTrusted` 검사, closed shadow DOM 칩 |
 | 재전송/오래된 메시지 | msgId 중복 거부, 수신 5분 초과 거부, AAD=channelId |
 | 확장 내 코드 잔존 | `chrome.storage.session`(메모리), 3분 만료, 입력 후 즉시 삭제 |
@@ -68,8 +71,8 @@ npm run build:ext    # extension/dist 생성
 
 | Phase | 내용 | 완료 기준 |
 |---|---|---|
-| **0** | 스캐폴드 + 핵심 순수 로직 | 파서·암호화·릴레이·입력칸 탐지 테스트 통과 ← 현재 |
-| **1** | 데스크톱 E2E 데모 | 폰 시뮬레이터 스크립트 → 릴레이 → 확장 칩 → 실제 로그인 페이지 입력 |
+| **0** | 스캐폴드 + 핵심 순수 로직 | 파서·암호화·릴레이·입력칸 탐지 테스트 통과 |
+| **1** | 데스크톱 E2E 데모 | 폰 시뮬레이터 스크립트 → 릴레이 → 확장 칩 → 실제 로그인 페이지 입력 ← 현재 |
 | **2** | Android companion MVP | 실기기 SMS 수신 → 5초 내 크롬 칩 표시, 페어링 QR |
 | **3** | iOS 경로 + 파서 고도화 | 단축어 자동화 경로 문서화·검증, 실제 SMS 샘플 100건 정확도 ≥ 95% |
 | **4** | 배포 | 릴레이 호스팅(저비용), Chrome Web Store 비공개 배포, 개인정보처리방침 |
